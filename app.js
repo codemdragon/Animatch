@@ -159,6 +159,17 @@ async function fetchAnime(append = false) {
         url = `https://api.jikan.moe/v4/top/anime?filter=airing&limit=20&sfw=true&page=${state.currentPage}`;
     }
 
+    if (!navigator.onLine) {
+        cardStack.innerHTML = `
+            <div class="empty">
+                <span class="material-icons-round" style="font-size:3rem;color:var(--text-sec)">wifi_off</span><br>
+                <span>Discover requires internet.</span><br>
+                <button onclick="switchToView('view-list')" class="btn-smart" style="margin-top:15px">View My List</button>
+            </div>`;
+        actionBar.classList.add('hidden');
+        return;
+    }
+
     isFetching = true;
     loader.classList.add('active');
     try {
@@ -603,7 +614,12 @@ function addToList(anime, status = 'planning') {
     if (state.watchlist.some(w => w.mal_id === anime.mal_id)) {
         showToast('Already in list', 'info'); return;
     }
-    state.watchlist.unshift({ ...anime, status, rating: 0, dateAdded: Date.now() });
+
+    // Create a copy without the heavy description to save localStorage space
+    const offlineAnime = { ...anime };
+    delete offlineAnime.synopsis;
+
+    state.watchlist.unshift({ ...offlineAnime, status, rating: 0, dateAdded: Date.now() });
     checkAchievements();
     saveData();
     showToast('Added to list!', 'bookmark_added');
