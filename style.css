@@ -43,6 +43,16 @@
     --shadow-soft: 0 4px 20px rgba(0, 0, 0, 0.08);
 }
 
+/* Mobile Breakpoint */
+@media (max-width: 480px) {
+
+    :root,
+    [data-theme="dark"] {
+        --header-height: 115px;
+        --nav-height: 56px;
+    }
+}
+
 /* --- Reset & Base --- */
 * {
     box-sizing: border-box;
@@ -323,6 +333,27 @@ main {
     flex-direction: column;
     cursor: grab;
     user-select: none;
+}
+
+@media (max-width: 480px) {
+    .anime-card {
+        max-height: 48dvmax;
+    }
+
+    .action-bar {
+        height: 60px;
+        padding: 0;
+    }
+
+    .btn-round {
+        width: 44px;
+        height: 44px;
+    }
+
+    .btn-like-main {
+        width: 56px;
+        height: 56px;
+    }
 }
 
 .anime-card:active {

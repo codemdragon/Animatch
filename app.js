@@ -8,7 +8,7 @@ const state = {
     skippedIds: [],
     stats: {
         totalSwipes: 0, totalLikes: 0, totalSkips: 0,
-        genreLikes: {}, typeLikes: {},
+        genreLikes: {}, typeLikes: {}, genreSkips: {}, typeSkips: {},
         ratingsGiven: 0, discoveries: 0
     },
     preferences: { genre: {}, type: {}, scoreBias: 7 },
@@ -221,7 +221,7 @@ async function fetchSurpriseAnime() {
 // --- Smart Recommendation ---
 function buildSmartUrl() {
     const topGenres = Object.entries(state.preferences.genre).sort((a, b) => b[1] - a[1]).slice(0, 3);
-    const genreMap = { Action: 1, Adventure: 2, Comedy: 4, Drama: 8, Fantasy: 10, Horror: 14, Mystery: 7, Romance: 22, 'Sci-Fi': 24, 'Slice of Life': 36, Sports: 30, Supernatural: 37, Thriller: 41 };
+    const genreMap = { Action: 1, Adventure: 2, Comedy: 4, Drama: 8, Fantasy: 10, Horror: 14, Isekai: 62, Mystery: 7, Romance: 22, 'Sci-Fi': 24, 'Slice of Life': 36, Sports: 30, Supernatural: 37, Thriller: 41 };
     const genreIds = topGenres.map(([g]) => genreMap[g]).filter(Boolean).join(',');
     let url = `https://api.jikan.moe/v4/anime?order_by=score&sort=desc&limit=20&sfw=true&page=${state.currentPage}`;
     if (genreIds) url += `&genres=${genreIds}`;
@@ -234,13 +234,37 @@ function rankByPreference(animeList) {
     const skippedSet = new Set(state.skippedIds);
     return animeList
         .filter(a => !likedIds.has(a.mal_id) && !skippedSet.has(a.mal_id))
+        .filter(a => {
+            // Dislike Detection
+            const genres = (a.genres || []).map(g => g.name);
+            const type = a.type || '';
+            let isHeavilyDisliked = false;
+
+            genres.forEach(g => {
+                const likes = state.stats.genreLikes[g] || 0;
+                const skips = state.stats.genreSkips[g] || 0;
+                if (skips >= 5 && (likes === 0 || likes / (likes + skips) < 0.15)) isHeavilyDisliked = true;
+            });
+
+            const tLikes = state.stats.typeLikes[type] || 0;
+            const tSkips = state.stats.typeSkips[type] || 0;
+            if (tSkips >= 5 && (tLikes === 0 || tLikes / (tLikes + tSkips) < 0.15)) isHeavilyDisliked = true;
+
+            // Strict avoidance: heavily disliked items only pass 1 in 40 times (2.5%)
+            if (isHeavilyDisliked) return Math.random() <= 0.025;
+            return true;
+        })
         .map(a => {
             let score = 0;
             const genres = (a.genres || []).map(g => g.name);
-            genres.forEach(g => { score += (state.preferences.genre[g] || 0) * 3; });
+            genres.forEach(g => {
+                score += (state.preferences.genre[g] || 0) * 3;
+                score -= (state.stats.genreSkips[g] || 0) * 0.5; // Slight penalty
+            });
             if (a.score) score += (a.score / 10) * 20;
             const type = a.type || '';
             score += (state.preferences.type[type] || 0);
+            score -= (state.stats.typeSkips[type] || 0) * 0.5;
             a._matchScore = score;
             a._matchReason = buildMatchReason(genres, a.score, type);
             return a;
@@ -543,6 +567,12 @@ function handleLike(anime) {
 function handleSkip(anime) {
     if (!state.skippedIds.includes(anime.mal_id)) state.skippedIds.push(anime.mal_id);
     state.stats.totalSkips++;
+    (anime.genres || []).forEach(g => {
+        state.stats.genreSkips[g.name] = (state.stats.genreSkips[g.name] || 0) + 1;
+    });
+    if (anime.type) {
+        state.stats.typeSkips[anime.type] = (state.stats.typeSkips[anime.type] || 0) + 1;
+    }
     markSeen(anime.mal_id);
     saveData();
 }
