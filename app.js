@@ -43,10 +43,73 @@ const modalLikeBtn = $('modalLikeBtn'), modalListBtn = $('modalListBtn');
 const modalScore = $('modalScore'), quickActions = $('quickActions');
 let currentModalAnime = null;
 let fetchTimeout, isFetching = false;
+let seenIds = new Set(); // Loaded from IndexedDB
+let isPreloading = false;
+const SEEN_LIMIT = 5000; // Max seen IDs to store
+const PRELOAD_THRESHOLD = 5; // Preload next page when this many cards left
+
+// --- IndexedDB for Seen Anime ---
+const IDB_NAME = 'animatch_seen';
+const IDB_STORE = 'ids';
+let idb = null;
+
+function openIDB() {
+    return new Promise((resolve, reject) => {
+        const req = indexedDB.open(IDB_NAME, 1);
+        req.onupgradeneeded = () => {
+            const db = req.result;
+            if (!db.objectStoreNames.contains(IDB_STORE)) {
+                db.createObjectStore(IDB_STORE, { keyPath: 'id' });
+            }
+        };
+        req.onsuccess = () => { idb = req.result; resolve(idb); };
+        req.onerror = () => reject(req.error);
+    });
+}
+
+async function loadSeenIds() {
+    try {
+        await openIDB();
+        const tx = idb.transaction(IDB_STORE, 'readonly');
+        const store = tx.objectStore(IDB_STORE);
+        const all = await idbGetAll(store);
+        seenIds = new Set(all.map(r => r.id));
+    } catch (e) { console.warn('IDB load failed, using memory only', e); }
+}
+
+function idbGetAll(store) {
+    return new Promise((resolve, reject) => {
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+    });
+}
+
+async function markSeen(malId) {
+    seenIds.add(malId);
+    if (!idb) return;
+    try {
+        const tx = idb.transaction(IDB_STORE, 'readwrite');
+        const store = tx.objectStore(IDB_STORE);
+        store.put({ id: malId, ts: Date.now() });
+        // Evict oldest if over limit
+        if (seenIds.size > SEEN_LIMIT) {
+            const allReq = store.getAll();
+            allReq.onsuccess = () => {
+                const all = allReq.result.sort((a, b) => a.ts - b.ts);
+                const toDelete = all.slice(0, all.length - SEEN_LIMIT);
+                const tx2 = idb.transaction(IDB_STORE, 'readwrite');
+                const s2 = tx2.objectStore(IDB_STORE);
+                toDelete.forEach(r => { s2.delete(r.id); seenIds.delete(r.id); });
+            };
+        }
+    } catch (e) { }
+}
 
 // --- Init ---
-function init() {
+async function init() {
     loadData();
+    await loadSeenIds();
     updateStreak();
     setupNav();
     setupInputs();
@@ -104,6 +167,9 @@ async function fetchAnime(append = false) {
         const data = await res.json();
         let results = data.data || [];
         state.hasMorePages = data.pagination?.has_next_page || false;
+
+        // Filter out already-seen anime
+        results = results.filter(a => !seenIds.has(a.mal_id));
 
         if (state.smartMode && results.length) {
             results = rankByPreference(results);
@@ -400,11 +466,29 @@ function showQuickActions(e, anime) {
 function advanceCard() {
     state.stats.totalSwipes++;
     state.stats.discoveries++;
+    // Mark current card as seen
+    const current = state.animeList[state.index];
+    if (current) markSeen(current.mal_id);
     state.index++;
     checkAchievements();
     saveData();
     renderCardStack();
     updateActionBar();
+    // Preload next page if approaching end
+    maybePreload();
+}
+
+async function maybePreload() {
+    const remaining = state.animeList.length - state.index;
+    if (remaining <= PRELOAD_THRESHOLD && state.hasMorePages && !isPreloading && !isFetching) {
+        isPreloading = true;
+        state.currentPage++;
+        try {
+            await fetchAnime(true);
+        } finally {
+            isPreloading = false;
+        }
+    }
 }
 
 function updateActionBar() {
@@ -459,6 +543,7 @@ function handleLike(anime) {
 function handleSkip(anime) {
     if (!state.skippedIds.includes(anime.mal_id)) state.skippedIds.push(anime.mal_id);
     state.stats.totalSkips++;
+    markSeen(anime.mal_id);
     saveData();
 }
 
@@ -725,53 +810,124 @@ function renderTopAnime() {
     `).join('');
 }
 
-// --- Social Export ---
+// --- Social Export (Redesigned Taste Card) ---
 $('btnExport').addEventListener('click', () => {
     const canvas = $('exportCanvas');
+    canvas.width = 600; canvas.height = 900;
     const ctx = canvas.getContext('2d');
     const { lvl } = getXpInfo();
+    const W = 600, H = 900;
 
-    // Background
-    const grad = ctx.createLinearGradient(0, 0, 600, 800);
-    grad.addColorStop(0, '#1a1a2e'); grad.addColorStop(1, '#0e0e12');
-    ctx.fillStyle = grad; ctx.fillRect(0, 0, 600, 800);
+    // Background gradient
+    const bg = ctx.createLinearGradient(0, 0, W, H);
+    bg.addColorStop(0, '#1a1a2e'); bg.addColorStop(0.5, '#16132b'); bg.addColorStop(1, '#0e0e12');
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
 
-    // Header
-    ctx.fillStyle = '#9d46ff'; ctx.font = 'bold 36px Inter, sans-serif';
-    ctx.textAlign = 'center'; ctx.fillText('AniMatch', 300, 60);
-    ctx.fillStyle = '#03dac6'; ctx.font = '20px Inter, sans-serif';
-    ctx.fillText(`Level ${lvl} • ${state.stats.totalLikes} Likes • ${state.streak.bestStreak} Day Best Streak`, 300, 95);
+    // Decorative circles
+    ctx.globalAlpha = 0.06;
+    ctx.beginPath(); ctx.arc(50, 100, 200, 0, Math.PI * 2); ctx.fillStyle = '#6200ea'; ctx.fill();
+    ctx.beginPath(); ctx.arc(550, 750, 250, 0, Math.PI * 2); ctx.fillStyle = '#03dac6'; ctx.fill();
+    ctx.globalAlpha = 1;
 
-    // Stats
-    ctx.fillStyle = '#fff'; ctx.font = 'bold 18px Inter, sans-serif';
-    ctx.fillText('— My Taste Profile —', 300, 145);
+    // Header bar
+    const hg = ctx.createLinearGradient(0, 0, W, 80);
+    hg.addColorStop(0, '#6200ea'); hg.addColorStop(1, '#9d46ff');
+    ctx.fillStyle = hg;
+    roundRect(ctx, 20, 20, W - 40, 80, 20); ctx.fill();
 
-    // Top genres
+    ctx.fillStyle = 'white'; ctx.font = 'bold 28px Inter, sans-serif';
+    ctx.textAlign = 'left'; ctx.fillText('AniMatch', 40, 68);
+    ctx.font = '16px Inter, sans-serif'; ctx.textAlign = 'right';
+    ctx.fillText(`Level ${lvl}`, W - 40, 55);
+    ctx.font = '12px Inter, sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.fillText(`${state.stats.totalLikes} Likes • ${state.streak.bestStreak}🔥 Streak`, W - 40, 75);
+
+    // Stats row
+    const stats = [
+        { label: 'Likes', value: state.stats.totalLikes, color: '#ff4b8a' },
+        { label: 'Swipes', value: state.stats.totalSwipes, color: '#4fc3f7' },
+        { label: 'In List', value: state.watchlist.length, color: '#81c784' },
+        { label: 'Streak', value: state.streak.bestStreak, color: '#ffd54f' }
+    ];
+    stats.forEach((s, i) => {
+        const x = 20 + i * ((W - 40) / 4);
+        const w = (W - 60) / 4;
+        ctx.fillStyle = 'rgba(255,255,255,0.05)';
+        roundRect(ctx, x + (i > 0 ? 5 : 0), 120, w, 70, 12); ctx.fill();
+        ctx.fillStyle = s.color; ctx.font = 'bold 24px Inter, sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText(s.value, x + w / 2 + (i > 0 ? 2.5 : 0), 155);
+        ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.font = '11px Inter, sans-serif';
+        ctx.fillText(s.label, x + w / 2 + (i > 0 ? 2.5 : 0), 175);
+    });
+
+    // Genre section
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    roundRect(ctx, 20, 210, W - 40, 180, 16); ctx.fill();
+    ctx.fillStyle = 'white'; ctx.font = 'bold 16px Inter, sans-serif'; ctx.textAlign = 'left';
+    ctx.fillText('🎨 Genre Taste', 40, 240);
     const topGenres = Object.entries(state.stats.genreLikes).sort((a, b) => b[1] - a[1]).slice(0, 5);
-    ctx.textAlign = 'left'; ctx.font = '16px Inter, sans-serif';
+    const genreColors = ['#6200ea', '#03dac6', '#ff4b8a', '#4fc3f7', '#ffd54f'];
+    const maxGenre = topGenres.length ? topGenres[0][1] : 1;
     topGenres.forEach(([name, val], i) => {
-        ctx.fillStyle = '#b0b0cc'; ctx.fillText(`${name}: ${val} likes`, 50, 190 + i * 30);
+        const y = 260 + i * 24;
+        ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.font = '13px Inter, sans-serif';
+        ctx.textAlign = 'left'; ctx.fillText(name, 40, y + 4);
+        // Bar
+        const barX = 180, barW = 320, barH = 12;
+        ctx.fillStyle = 'rgba(255,255,255,0.08)';
+        roundRect(ctx, barX, y - 8, barW, barH, 6); ctx.fill();
+        ctx.fillStyle = genreColors[i];
+        roundRect(ctx, barX, y - 8, barW * (val / maxGenre), barH, 6); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.font = '11px Inter, sans-serif';
+        ctx.textAlign = 'right'; ctx.fillText(val, W - 30, y + 4);
     });
+    if (!topGenres.length) {
+        ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.font = '13px Inter, sans-serif';
+        ctx.textAlign = 'center'; ctx.fillText('No data yet — start swiping!', W / 2, 300);
+    }
 
-    // Top rated
+    // Top Rated section
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    roundRect(ctx, 20, 410, W - 40, 220, 16); ctx.fill();
+    ctx.fillStyle = 'white'; ctx.font = 'bold 16px Inter, sans-serif'; ctx.textAlign = 'left';
+    ctx.fillText('⭐ Top Rated by You', 40, 440);
     const topRated = state.watchlist.filter(w => w.rating > 0).sort((a, b) => b.rating - a.rating).slice(0, 5);
-    ctx.fillStyle = '#fff'; ctx.font = 'bold 18px Inter, sans-serif';
-    ctx.textAlign = 'center'; ctx.fillText('— Top Rated —', 300, 370);
-    ctx.textAlign = 'left'; ctx.font = '16px Inter, sans-serif';
     topRated.forEach((a, i) => {
-        ctx.fillStyle = '#f0f0f5'; ctx.fillText(`#${i + 1} ${'⭐'.repeat(a.rating)} ${a.title.slice(0, 30)}`, 50, 410 + i * 30);
+        const y = 465 + i * 32;
+        ctx.fillStyle = '#ffd54f'; ctx.font = '14px Inter, sans-serif'; ctx.textAlign = 'left';
+        ctx.fillText(`#${i + 1}`, 40, y);
+        ctx.fillText('★'.repeat(a.rating), 70, y);
+        ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.font = '13px Inter, sans-serif';
+        ctx.fillText(a.title.length > 35 ? a.title.slice(0, 35) + '…' : a.title, 160, y);
     });
+    if (!topRated.length) {
+        ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.font = '13px Inter, sans-serif';
+        ctx.textAlign = 'center'; ctx.fillText('Rate anime to see your top picks here!', W / 2, 500);
+    }
 
-    // Achievements
+    // Achievements section
     const unlocked = state.achievements.filter(a => a.unlocked);
-    ctx.fillStyle = '#fff'; ctx.font = 'bold 18px Inter, sans-serif';
-    ctx.textAlign = 'center'; ctx.fillText(`— ${unlocked.length}/${state.achievements.length} Achievements —`, 300, 590);
-    ctx.font = '14px Inter, sans-serif'; ctx.fillStyle = '#03dac6';
-    ctx.fillText(unlocked.map(a => a.title).join(' • ') || 'None yet', 300, 620);
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    roundRect(ctx, 20, 650, W - 40, 100, 16); ctx.fill();
+    ctx.fillStyle = 'white'; ctx.font = 'bold 16px Inter, sans-serif'; ctx.textAlign = 'left';
+    ctx.fillText(`🏆 ${unlocked.length}/${state.achievements.length} Achievements`, 40, 680);
+    ctx.fillStyle = '#03dac6'; ctx.font = '12px Inter, sans-serif';
+    const achText = unlocked.map(a => a.title).join('  •  ') || 'None unlocked yet';
+    ctx.fillText(achText.length > 70 ? achText.slice(0, 70) + '…' : achText, 40, 705);
+    // Progress bar
+    const achPct = unlocked.length / state.achievements.length;
+    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+    roundRect(ctx, 40, 720, W - 80, 8, 4); ctx.fill();
+    ctx.fillStyle = '#03dac6';
+    roundRect(ctx, 40, 720, (W - 80) * achPct, 8, 4); ctx.fill();
 
-    // Watermark
-    ctx.fillStyle = '#444'; ctx.font = '12px Inter, sans-serif';
-    ctx.fillText('Generated by AniMatch V3', 300, 770);
+    // Footer
+    ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.font = '11px Inter, sans-serif';
+    ctx.textAlign = 'center'; ctx.fillText('Generated by AniMatch V3 • animatch.app', W / 2, H - 30);
+
+    // Border glow
+    ctx.strokeStyle = 'rgba(98, 0, 234, 0.3)'; ctx.lineWidth = 2;
+    roundRect(ctx, 10, 10, W - 20, H - 20, 24); ctx.stroke();
 
     canvas.toBlob(blob => {
         const url = URL.createObjectURL(blob);
@@ -781,6 +937,17 @@ $('btnExport').addEventListener('click', () => {
         showToast('Taste card downloaded!', 'download');
     });
 });
+
+// Canvas rounded rectangle helper
+function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y); ctx.arcTo(x + w, y, x + w, y + r, r);
+    ctx.lineTo(x + w, y + h - r); ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+    ctx.lineTo(x + r, y + h); ctx.arcTo(x, y + h, x, y + h - r, r);
+    ctx.lineTo(x, y + r); ctx.arcTo(x, y, x + r, y, r);
+    ctx.closePath();
+}
 
 // --- Theme ---
 function setupThemeToggle() {
@@ -845,7 +1012,7 @@ function showToast(msg, iconName = 'info') {
     setTimeout(() => t.classList.remove('show'), 2500);
 }
 
-function haptic() { try { navigator.vibrate?.(12); } catch (e) {} }
+function haptic() { try { navigator.vibrate?.(12); } catch (e) { } }
 
 function triggerHeartBurst(x, y) {
     const container = document.createElement('div');
@@ -892,7 +1059,7 @@ function loadData() {
                 state.watchlist = (d.watchlist || []).map(a => ({ ...a, status: 'planning', rating: 0, dateAdded: Date.now() }));
                 state.stats.totalLikes = d.liked || 0;
                 showToast('Data migrated from V2!', 'upgrade');
-            } catch (e) {}
+            } catch (e) { }
         }
         return;
     }
@@ -938,11 +1105,11 @@ function setupInputs() {
     genreSelect.addEventListener('change', () => { state.smartMode = false; $('btnSmartMatch').classList.remove('active-mode'); debounceFetch(); });
 }
 
-function setupQuickActions() {} // Setup handled inline
+function setupQuickActions() { } // Setup handled inline
 
 // --- PWA ---
 if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register('sw.js').catch(() => { });
 }
 
 // --- Start ---
