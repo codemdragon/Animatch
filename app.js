@@ -123,15 +123,19 @@ async function init() {
     // Privacy Check
     if (!state.privacyAccepted) {
         $('privacyModal').style.display = 'flex';
+        $('privacyModal').style.opacity = '1';
+        $('privacyModal').style.pointerEvents = 'all';
         $('btnAcceptPrivacy').onclick = () => {
             state.privacyAccepted = true;
             saveData();
-            $('privacyModal').style.display = 'none';
-            fetchAnime();
+            $('privacyModal').style.opacity = '0';
+            $('privacyModal').style.pointerEvents = 'none';
+            setTimeout(() => $('privacyModal').style.display = 'none', 300);
         };
-    } else {
-        fetchAnime();
     }
+
+    // Always pre-load the first stack of anime
+    fetchAnime();
 }
 
 // --- Streak ---
