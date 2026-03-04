@@ -364,19 +364,9 @@ function createCard(anime) {
 
 // --- Card Click ---
 function setupCardClick(card, anime) {
-    let clicks = 0, timer = null;
     card.addEventListener('click', (e) => {
         if (card._wasDragged || card._longPressed) { card._wasDragged = false; card._longPressed = false; return; }
-        clicks++;
-        if (clicks === 1) {
-            timer = setTimeout(() => { openModal(anime); clicks = 0; }, 280);
-        } else {
-            clearTimeout(timer);
-            handleLike(anime);
-            triggerHeartBurst(e.clientX, e.clientY);
-            showToast(`Liked ${anime.title}`, 'favorite');
-            clicks = 0;
-        }
+        openModal(anime);
     });
 }
 
