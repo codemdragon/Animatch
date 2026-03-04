@@ -222,10 +222,20 @@ async function fetchSurpriseAnime() {
 function buildSmartUrl() {
     const topGenres = Object.entries(state.preferences.genre).sort((a, b) => b[1] - a[1]).slice(0, 3);
     const genreMap = { Action: 1, Adventure: 2, Comedy: 4, Drama: 8, Fantasy: 10, Horror: 14, Isekai: 62, Mystery: 7, Romance: 22, 'Sci-Fi': 24, 'Slice of Life': 36, Sports: 30, Supernatural: 37, Thriller: 41 };
-    const genreIds = topGenres.map(([g]) => genreMap[g]).filter(Boolean).join(',');
+
+    // Pick ONE random top genre to prevent over-filtering (Jikan treats multiple genres as AND)
+    const randomTopGenre = topGenres.length ? topGenres[Math.floor(Math.random() * topGenres.length)] : null;
     let url = `https://api.jikan.moe/v4/anime?order_by=score&sort=desc&limit=20&sfw=true&page=${state.currentPage}`;
-    if (genreIds) url += `&genres=${genreIds}`;
-    if (state.preferences.scoreBias > 6) url += `&min_score=${Math.max(5, state.preferences.scoreBias - 2)}`;
+
+    if (randomTopGenre) {
+        const genreId = genreMap[randomTopGenre[0]];
+        if (genreId) url += `&genres=${genreId}`;
+    }
+
+    // Ensure min_score is an integer and maxes out at 7 to prevent 0 results
+    if (state.preferences.scoreBias > 6) {
+        url += `&min_score=${Math.min(7, Math.floor(state.preferences.scoreBias - 2))}`;
+    }
     return url;
 }
 
@@ -301,16 +311,20 @@ function updatePreferences(anime) {
 // --- Card Rendering ---
 function renderCardStack() {
     cardStack.innerHTML = '';
-    if (!state.animeList.length) {
-        cardStack.innerHTML = '<div class="empty"><span class="material-icons-round" style="font-size:3rem;color:var(--primary-light)">search_off</span><br>No results found</div>';
+
+    // If we've run out of cards (e.g. filtered by heavily disliked or seen IDs), auto-fetch next page
+    if ((!state.animeList.length || state.index >= state.animeList.length) && state.hasMorePages) {
+        state.currentPage++;
+        fetchAnime(true);
         return;
     }
+
+    if (!state.animeList.length || state.index >= state.animeList.length) {
+        cardStack.innerHTML = '<div class="empty"><span class="material-icons-round" style="font-size:3rem;color:var(--primary-light)">check_circle</span><br>No more results found! Try a different search.</div>';
+        return;
+    }
+
     const anime = state.animeList[state.index];
-    if (!anime) {
-        if (state.hasMorePages) { state.currentPage++; fetchAnime(true); return; }
-        cardStack.innerHTML = '<div class="empty"><span class="material-icons-round" style="font-size:3rem;color:var(--accent)">check_circle</span><br>You\'ve seen them all! Try a new search.</div>';
-        return;
-    }
     const card = createCard(anime);
     cardStack.appendChild(card);
 }
@@ -381,6 +395,7 @@ function setupCardDrag(card, anime) {
         const pt = e.type.includes('mouse') ? e : e.touches[0];
         startX = pt.clientX; startY = pt.clientY;
         card.style.transition = 'none';
+        card.style.filter = 'none';
     };
 
     const onMove = (e) => {
@@ -388,9 +403,12 @@ function setupCardDrag(card, anime) {
         const pt = e.type.includes('mouse') ? e : e.touches[0];
         currentX = pt.clientX; currentY = pt.clientY;
         const dx = currentX - startX, dy = currentY - startY;
-        if (Math.abs(dx) > 10 || Math.abs(dy) > 10) card._wasDragged = true;
+
+        // Increased threshold to 15 to prevent taps misregistering as drags
+        if (Math.abs(dx) > 15 || Math.abs(dy) > 15) card._wasDragged = true;
+
         const rotate = dx * 0.04;
-        card.style.transform = `translateX(${dx}px) translateY(${Math.max(0, dy)}px) rotate(${rotate}deg)`;
+        card.style.transform = `translateX(${dx}px) translateY(${dy}px) rotate(${rotate}deg)`;
 
         const likeBadge = card.querySelector('.like');
         const skipBadge = card.querySelector('.skip');
@@ -399,14 +417,21 @@ function setupCardDrag(card, anime) {
         if (dx > threshold) {
             likeBadge.style.opacity = Math.min((dx - threshold) / 80, 1);
             skipBadge.style.opacity = 0; saveBadge.style.opacity = 0;
+            card.style.filter = 'none';
         } else if (dx < -threshold) {
             skipBadge.style.opacity = Math.min((Math.abs(dx) - threshold) / 80, 1);
             likeBadge.style.opacity = 0; saveBadge.style.opacity = 0;
+            card.style.filter = 'none';
         } else if (dy > thresholdY && Math.abs(dx) < threshold) {
             saveBadge.style.opacity = Math.min((dy - thresholdY) / 80, 1);
             likeBadge.style.opacity = 0; skipBadge.style.opacity = 0;
+            card.style.filter = 'none';
+        } else if (dy < -thresholdY && Math.abs(dx) < threshold) {
+            likeBadge.style.opacity = 0; skipBadge.style.opacity = 0; saveBadge.style.opacity = 0;
+            card.style.filter = 'brightness(0.7)'; // visual indicator for open details
         } else {
             likeBadge.style.opacity = 0; skipBadge.style.opacity = 0; saveBadge.style.opacity = 0;
+            card.style.filter = 'none';
         }
     };
 
@@ -414,7 +439,7 @@ function setupCardDrag(card, anime) {
         if (!isDragging) return;
         isDragging = false;
         const dx = currentX - startX, dy = currentY - startY;
-        card.style.transition = 'transform 0.35s ease, opacity 0.35s';
+        card.style.transition = 'transform 0.35s ease, opacity 0.35s, filter 0.35s';
 
         if (dx > threshold) {
             card.style.transform = 'translateX(120vw) rotate(15deg)'; card.style.opacity = '0';
@@ -429,8 +454,14 @@ function setupCardDrag(card, anime) {
             card.style.transform = 'translateY(120vh)'; card.style.opacity = '0';
             haptic(); addToList(anime);
             setTimeout(() => advanceCard(), 250);
+        } else if (dy < -thresholdY && Math.abs(dx) < threshold) {
+            // Swipe Up -> Details
+            card.style.transform = 'translateX(0) translateY(0) rotate(0)';
+            card.style.filter = 'none';
+            openModal(anime);
         } else {
             card.style.transform = 'translateX(0) translateY(0) rotate(0)';
+            card.style.filter = 'none';
             card.querySelector('.like').style.opacity = 0;
             card.querySelector('.skip').style.opacity = 0;
             card.querySelector('.save').style.opacity = 0;
