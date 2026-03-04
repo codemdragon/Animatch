@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AniMatch - Discovery</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #6200ea;
+            --primary-light: #9d46ff;
+            --accent: #03dac6;
+            --bg-dark: #121212;
+            --surface: #1e1e1e;
+            --surface-2: #2c2c2c;
+            --text-main: #ffffff;
+            --text-sec: #b0b0b0;
+            --nav-height: 60px;
+            --header-height: 130px; /* Increased for search bar */
+            --border-radius: 16px;
+            --card-width: 90vw;
+            --card-height: 65vh;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        
+        body {
+            margin: 0; padding: 0;
+            font-family: 'Roboto', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* --- Header & Search --- */
+        header {
+            background-color: var(--surface);
+            padding: 10px 16px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            height: var(--header-height);
+            transition: height 0.3s;
+        }
+
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .app-title {
+            font-size: 1.2rem;
+            font-weight: 800;
+            color: var(--primary-light);
+        }
+
+        .level-badge {
+            background: var(--surface-2);
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            color: var(--accent);
+        }
+
+        .search-container {
+            display: flex;
+            gap: 8px;
+        }
+
+        /* Native Android Styled Inputs */
+        .input-group {
+            position: relative;
+            flex: 1;
+        }
+
+        .material-input {
+            width: 100%;
+            background: var(--surface-2);
+            border: none;
+            border-radius: 8px;
+            padding: 10px 10px 10px 40px;
+            color: white;
+            font-size: 0.9rem;
+            outline: none;
+        }
+
+        .input-icon {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-sec);
+            font-size: 1.2rem;
+            pointer-events: none;
+        }
+
+        .select-wrapper {
+            position: relative;
+            width: 120px;
+        }
+        
+        .custom-select {
+            width: 100%;
+            appearance: none;
+            background: var(--surface-2);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            padding: 0 30px 0 10px;
+            height: 41px; /* Match input height */
+            font-size: 0.8rem;
+            outline: none;
+        }
+        
+        .select-arrow {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            pointer-events: none;
+            color: var(--text-sec);
+            font-size: 1.2rem;
+        }
+
+        /* --- Main Content --- */
+        main {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            width: 100%;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .view {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            padding: 16px;
+            padding-bottom: 80px;
+            overflow-y: auto;
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.3s;
+        }
+        .view.active { opacity: 1; pointer-events: all; z-index: 10; }
+
+        /* --- Card Stack & Swipe --- */
+        .card-area {
+            position: relative;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .anime-card {
+            position: absolute;
+            width: var(--card-width);
+            height: var(--card-height);
+            background: var(--surface);
+            border-radius: var(--border-radius);
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+            transform-origin: 50% 100%;
+            display: flex;
+            flex-direction: column;
+            cursor: grab;
+            user-select: none;
+        }
+
+        .anime-card:active { cursor: grabbing; }
+
+        .card-img { width: 100%; height: 60%; object-fit: cover; pointer-events: none; }
+        .card-body { padding: 16px; flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .card-title { font-size: 1.3rem; font-weight: 700; margin: 0 0 5px 0; line-height: 1.2; }
+        .card-meta { color: var(--accent); font-size: 0.8rem; margin-bottom: 8px; display: flex; gap: 8px; }
+        .card-desc { font-size: 0.9rem; color: var(--text-sec); line-height: 1.4; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; }
+
+        /* Navigation Badges (Next/Prev) */
+        .nav-badge {
+            position: absolute;
+            top: 40px; padding: 8px 16px;
+            border: 3px solid; border-radius: 8px;
+            font-size: 1.5rem; font-weight: bold;
+            text-transform: uppercase; opacity: 0;
+            z-index: 20; pointer-events: none;
+            transform: rotate(0);
+        }
+        .nav-badge.next { right: 40px; color: var(--primary); border-color: var(--primary); }
+        .nav-badge.prev { left: 40px; color: var(--text-sec); border-color: var(--text-sec); }
+
+        /* Action Buttons (Fixed Bottom) */
+        .action-bar {
+            display: flex; justify-content: center; gap: 24px;
+            margin-top: 10px; height: 60px; align-items: center; width: 100%;
+        }
+
+        .btn-round {
+            width: 56px; height: 56px; border-radius: 50%;
+            border: none; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            transition: transform 0.1s; background: var(--surface); color: var(--text-main);
+        }
+        .btn-round:active { transform: scale(0.9); }
+        .btn-like { background: var(--primary); color: white; width: 64px; height: 64px; }
+        .btn-prev { color: var(--text-sec); border: 1px solid #444; }
+        .btn-next { color: var(--primary); border: 1px solid var(--primary); }
+
+        /* --- List View --- */
+        .list-toolbar {
+            display: flex; gap: 8px; margin-bottom: 16px; position: sticky; top: 0;
+            background: var(--bg-dark); z-index: 5; padding-bottom: 8px;
+        }
+
+        .list-item {
+            display: flex; gap: 12px; background: var(--surface);
+            padding: 10px; border-radius: 12px; margin-bottom: 12px;
+        }
+        .list-img { width: 70px; height: 100px; border-radius: 8px; object-fit: cover; }
+        .list-info { flex: 1; }
+        .list-title { font-weight: bold; margin-bottom: 4px; font-size: 1rem; }
+        .list-acts { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+
+        /* --- Modal (Full Details) --- */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); z-index: 1000;
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.3s;
+            display: flex; align-items: flex-end; /* Slide up from bottom */
+        }
+        .modal-overlay.open { opacity: 1; pointer-events: all; }
+
+        .modal-content {
+            background: var(--surface); width: 100%; height: 90vh;
+            border-top-left-radius: 24px; border-top-right-radius: 24px;
+            transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+            display: flex; flex-direction: column; overflow: hidden;
+        }
+        .modal-overlay.open .modal-content { transform: translateY(0); }
+
+        .modal-header { position: relative; height: 35%; }
+        .modal-img { width: 100%; height: 100%; object-fit: cover; mask-image: linear-gradient(to bottom, black 70%, transparent 100%); }
+        .modal-close {
+            position: absolute; top: 20px; right: 20px;
+            background: rgba(0,0,0,0.5); color: white; border-radius: 50%;
+            width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; backdrop-filter: blur(4px);
+        }
+
+        .modal-body {
+            padding: 20px; overflow-y: auto; flex: 1;
+            margin-top: -40px; position: relative; z-index: 2;
+        }
+        .modal-title { font-size: 1.6rem; margin-bottom: 8px; }
+        .modal-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+        .tag { background: var(--surface-2); color: var(--text-sec); padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; }
+        .modal-desc { line-height: 1.6; color: var(--text-sec); margin-bottom: 24px; }
+        
+        .modal-btn {
+            width: 100%; padding: 14px; border-radius: 12px; border: none;
+            font-size: 1rem; font-weight: bold; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            margin-bottom: 12px;
+        }
+        .btn-add-list { background: var(--surface-2); color: white; }
+        .btn-like-modal { background: var(--primary); color: white; }
+
+        /* --- Achievements --- */
+        .ach-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .ach-card { background: var(--surface); padding: 16px; border-radius: 12px; text-align: center; opacity: 0.5; }
+        .ach-card.unlocked { opacity: 1; border: 1px solid var(--accent); }
+        .ach-icon { font-size: 2rem; color: var(--accent); margin-bottom: 8px; }
+
+        /* --- Navigation Bar --- */
+        nav {
+            height: var(--nav-height); background: var(--surface);
+            display: flex; justify-content: space-around; align-items: center;
+            position: absolute; bottom: 0; width: 100%; max-width: 600px;
+            border-top: 1px solid #333; z-index: 100;
+        }
+        .nav-item {
+            display: flex; flex-direction: column; align-items: center;
+            color: var(--text-sec); font-size: 0.7rem; cursor: pointer;
+        }
+        .nav-item.active { color: var(--primary); }
+        .nav-item span { font-size: 1.5rem; margin-bottom: 2px; }
+
+        /* --- Utilities --- */
+        .loader {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(18, 18, 18, 0.8); z-index: 50;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            opacity: 0; pointer-events: none; transition: opacity 0.2s;
+        }
+        .loader.active { opacity: 1; pointer-events: all; }
+        .spinner {
+            width: 40px; height: 40px; border: 3px solid var(--surface-2);
+            border-top: 3px solid var(--primary); border-radius: 50%;
+            animation: spin 1s linear infinite; margin-bottom: 10px;
+        }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        .toast {
+            position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%) translateY(20px);
+            background: #333; color: white; padding: 10px 20px; border-radius: 20px;
+            opacity: 0; transition: 0.3s; z-index: 200; pointer-events: none;
+        }
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+        .empty { text-align: center; color: var(--text-sec); margin-top: 50px; }
+        .hidden { display: none !important; }
+
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header>
+        <div class="header-top">
+            <div class="app-title">AniMatch</div>
+            <div class="level-badge">
+                <span class="material-icons-round" style="font-size:14px">bolt</span>
+                <span id="levelDisplay">Lvl 1</span>
+            </div>
+        </div>
+        
+        <div class="search-container">
+            <div class="input-group">
+                <span class="material-icons-round input-icon">search</span>
+                <input type="text" id="searchInput" class="material-input" placeholder="Search anime...">
+            </div>
+            <div class="select-wrapper">
+                <select id="genreSelect" class="custom-select">
+                    <option value="">All Genres</option>
+                    <option value="1">Action</option>
+                    <option value="2">Adventure</option>
+                    <option value="4">Comedy</option>
+                    <option value="8">Drama</option>
+                    <option value="10">Fantasy</option>
+                    <option value="14">Horror</option>
+                    <option value="22">Romance</option>
+                    <option value="24">Sci-Fi</option>
+                    <option value="36">Slice of Life</option>
+                    <option value="30">Sports</option>
+                    <option value="37">Supernatural</option>
+                </select>
+                <span class="material-icons-round select-arrow">expand_more</span>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <!-- View: Discover -->
+        <div id="view-discover" class="view active">
+            <div class="card-area" id="cardStack">
+                <!-- Cards injected here -->
+                <div class="empty">
+                    <span class="material-icons-round" style="font-size:3rem">travel_explore</span><br>
+                    Search or Select a Genre to start
+                </div>
+            </div>
+
+            <div class="action-bar hidden" id="actionBar">
+                <button class="btn-round btn-prev" id="btnPrev" aria-label="Previous">
+                    <span class="material-icons-round">chevron_left</span>
+                </button>
+                <button class="btn-round btn-like" id="btnLike" aria-label="Like">
+                    <span class="material-icons-round">favorite</span>
+                </button>
+                <button class="btn-round btn-next" id="btnNext" aria-label="Next">
+                    <span class="material-icons-round">chevron_right</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- View: List -->
+        <div id="view-list" class="view">
+            <h2>My List</h2>
+            <div class="list-toolbar">
+                <div class="input-group">
+                    <span class="material-icons-round input-icon">filter_list</span>
+                    <input type="text" id="listFilterInput" class="material-input" placeholder="Filter list...">
+                </div>
+            </div>
+            <div id="watchlistContainer">
+                <!-- List items here -->
+            </div>
+        </div>
+
+        <!-- View: Achievements -->
+        <div id="view-achievements" class="view">
+            <h2>Achievements</h2>
+            <div class="ach-grid" id="achGrid"></div>
+        </div>
+    </main>
+
+    <!-- Navigation -->
+    <nav>
+        <div class="nav-item active" data-target="view-discover">
+            <span class="material-icons-round">explore</span> Discover
+        </div>
+        <div class="nav-item" data-target="view-list">
+            <span class="material-icons-round">bookmarks</span> List
+        </div>
+        <div class="nav-item" data-target="view-achievements">
+            <span class="material-icons-round">emoji_events</span> Awards
+        </div>
+    </nav>
+
+    <!-- Details Modal -->
+    <div class="modal-overlay" id="detailsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <img src="" alt="" class="modal-img" id="modalImg">
+                <div class="modal-close" id="modalClose">
+                    <span class="material-icons-round">close</span>
+                </div>
+            </div>
+            <div class="modal-body">
+                <h2 class="modal-title" id="modalTitle">Title</h2>
+                <div class="modal-tags" id="modalGenres">
+                    <!-- Tags -->
+                </div>
+                <p class="modal-desc" id="modalDesc">Description...</p>
+                
+                <button class="modal-btn btn-like-modal" id="modalLikeBtn">
+                    <span class="material-icons-round">favorite</span> Like This
+                </button>
+                <button class="modal-btn btn-add-list" id="modalListBtn">
+                    <span class="material-icons-round">add</span> Add to Watchlist
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Global Loader -->
+    <div class="loader" id="globalLoader">
+        <div class="spinner"></div>
+        <div style="color:white">Loading...</div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast">Message</div>
+
+    <script>
+        // --- State ---
+        const state = {
+            animeList: [],
+            index: 0,
+            watchlist: [],
+            liked: 0,
+            saved: 0,
+            achievements: [
+                {id: 'first_like', title: 'First Like', icon: 'favorite', unlocked: false},
+                {id: 'collector', title: 'Collector', icon: 'bookmark', unlocked: false},
+                {id: 'scout', title: 'Scout', icon: 'search', unlocked: false},
+                {id: 'master', title: 'Genre Master', icon: 'category', unlocked: false}
+            ]
+        };
+
+        // --- DOM Elements ---
+        const cardStack = document.getElementById('cardStack');
+        const loader = document.getElementById('globalLoader');
+        const actionBar = document.getElementById('actionBar');
+        const searchInput = document.getElementById('searchInput');
+        const genreSelect = document.getElementById('genreSelect');
+        const listFilter = document.getElementById('listFilterInput');
+        
+        // Modal Elements
+        const modal = document.getElementById('detailsModal');
+        const modalImg = document.getElementById('modalImg');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalDesc = document.getElementById('modalDesc');
+        const modalGenres = document.getElementById('modalGenres');
+        const modalLikeBtn = document.getElementById('modalLikeBtn');
+        const modalListBtn = document.getElementById('modalListBtn');
+        let currentModalAnime = null;
+
+        // --- Init ---
+        function init() {
+            loadData();
+            setupNav();
+            setupInputs();
+            renderAchievements();
+            // Initial Fetch
+            fetchAnime();
+        }
+
+        // --- Data Fetching & Debouncing ---
+        let fetchTimeout;
+        let isFetching = false;
+
+        // Debounce function to prevent spam
+        function debounceFetch() {
+            if (isFetching) return; // Hard lock if already fetching
+            clearTimeout(fetchTimeout);
+            fetchTimeout = setTimeout(fetchAnime, 600);
+        }
+
+        async function fetchAnime() {
+            const query = searchInput.value.trim();
+            const genre = genreSelect.value;
+            
+            // Determine URL
+            let url = 'https://api.jikan.moe/v4/top/anime?filter=airing&limit=20&sfw=true';
+            
+            if (query) {
+                url = `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(query)}&limit=20&sfw=true`;
+                if (genre) url += `&genres=${genre}`;
+            } else if (genre) {
+                url = `https://api.jikan.moe/v4/anime?genres=${genre}&order_by=score&sort=desc&limit=20&sfw=true`;
+            }
+
+            isFetching = true;
+            loader.classList.add('active'); // Show clean spinner
+
+            try {
+                const res = await fetch(url);
+                if (!res.ok) throw new Error('API Limit');
+                const data = await res.json();
+                
+                state.animeList = data.data || [];
+                state.index = 0;
+                
+                renderCardStack();
+                updateActionBar();
+                
+                // Unlock scout achievement if search used
+                if(query || genre) unlockAchievement('scout');
+
+            } catch (err) {
+                console.error(err);
+                showToast('Error loading data. Slow down!', 'error');
+            } finally {
+                isFetching = false;
+                loader.classList.remove('active');
+            }
+        }
+
+        // --- Rendering Cards ---
+        function renderCardStack() {
+            cardStack.innerHTML = '';
+            
+            if (state.animeList.length === 0) {
+                cardStack.innerHTML = '<div class="empty"><span class="material-icons-round" style="font-size:3rem">search_off</span><br>No results found</div>';
+                return;
+            }
+
+            // Create a stack of 3 cards (Current, Next, Prev logic handled by index)
+            // We render the current card, and maybe the next one visually behind it?
+            // Actually, let's just render the current active card clearly to keep performance high
+            // and logic simple.
+            
+            const anime = state.animeList[state.index];
+            if (!anime) return;
+
+            const card = createCard(anime);
+            cardStack.appendChild(card);
+        }
+
+        function createCard(anime) {
+            const el = document.createElement('div');
+            el.className = 'anime-card';
+            
+            // Badges for swipe direction
+            const nextBadge = document.createElement('div');
+            nextBadge.className = 'nav-badge next';
+            nextBadge.innerText = 'NEXT';
+            
+            const prevBadge = document.createElement('div');
+            prevBadge.className = 'nav-badge prev';
+            prevBadge.innerText = 'PREV';
+
+            el.appendChild(nextBadge);
+            el.appendChild(prevBadge);
+
+            const imgUrl = anime.images?.jpg?.large_image_url || 'https://via.placeholder.com/300x450?text=No+Image';
+            const genres = anime.genres ? anime.genres.map(g => g.name).slice(0,2).join(', ') : '';
+
+            el.innerHTML += `
+                <img src="${imgUrl}" class="card-img" draggable="false">
+                <div class="card-body">
+                    <h3 class="card-title">${anime.title}</h3>
+                    <div class="card-meta">
+                        <span>${anime.type}</span> • <span>⭐ ${anime.score}</span>
+                    </div>
+                    <div class="card-desc">${anime.synopsis || 'No description available.'}</div>
+                </div>
+            `;
+
+            // Interactions
+            setupCardDrag(el, anime);
+            setupCardClick(el, anime);
+
+            return el;
+        }
+
+        // --- Card Interactions (Click vs Double Click) ---
+        function setupCardClick(card, anime) {
+            let clicks = 0;
+            let timer = null;
+
+            card.addEventListener('click', (e) => {
+                clicks++;
+                if (clicks === 1) {
+                    timer = setTimeout(() => {
+                        // Single Click -> Open Details
+                        openModal(anime);
+                        clicks = 0;
+                    }, 300); // Wait for potential second click
+                } else {
+                    // Double Click -> Like
+                    clearTimeout(timer);
+                    handleLike(anime);
+                    showToast(`Liked ${anime.title}`, 'favorite');
+                    clicks = 0;
+                }
+            });
+        }
+
+        // --- Card Swiping (Navigation) ---
+        function setupCardDrag(card, anime) {
+            let startX = 0, currentX = 0, isDragging = false;
+            const threshold = 100;
+
+            const onStart = (e) => {
+                isDragging = true;
+                startX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
+                card.style.transition = 'none';
+            };
+
+            const onMove = (e) => {
+                if (!isDragging) return;
+                currentX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
+                const diff = currentX - startX;
+                const rotate = diff * 0.05;
+                
+                card.style.transform = `translateX(${diff}px) rotate(${rotate}deg)`;
+
+                // Visual Feedback
+                const nextBadge = card.querySelector('.next');
+                const prevBadge = card.querySelector('.prev');
+
+                if (diff > threshold) {
+                    // Dragging Right -> Next
+                    nextBadge.style.opacity = Math.min((diff - threshold) / 100, 1);
+                    prevBadge.style.opacity = 0;
+                } else if (diff < -threshold) {
+                    // Dragging Left -> Previous
+                    prevBadge.style.opacity = Math.min((Math.abs(diff) - threshold) / 100, 1);
+                    nextBadge.style.opacity = 0;
+                } else {
+                    nextBadge.style.opacity = 0;
+                    prevBadge.style.opacity = 0;
+                }
+            };
+
+            const onEnd = () => {
+                if (!isDragging) return;
+                isDragging = false;
+                const diff = currentX - startX;
+
+                card.style.transition = 'transform 0.3s ease';
+
+                if (diff > threshold) {
+                    // Swiped Right (Next)
+                    card.style.transform = 'translateX(100vw) rotate(10deg)';
+                    card.style.opacity = '0';
+                    setTimeout(() => {
+                        goNext();
+                    }, 200);
+                } else if (diff < -threshold) {
+                    // Swiped Left (Previous)
+                    card.style.transform = 'translateX(-100vw) rotate(-10deg)';
+                    card.style.opacity = '0';
+                    setTimeout(() => {
+                        goPrev();
+                    }, 200);
+                } else {
+                    // Reset
+                    card.style.transform = 'translateX(0) rotate(0)';
+                    card.querySelector('.next').style.opacity = 0;
+                    card.querySelector('.prev').style.opacity = 0;
+                }
+            };
+
+            card.addEventListener('touchstart', onStart);
+            card.addEventListener('touchmove', onMove);
+            card.addEventListener('touchend', onEnd);
+            card.addEventListener('mousedown', onStart);
+            window.addEventListener('mousemove', onMove);
+            window.addEventListener('mouseup', onEnd);
+        }
+
+        // --- Navigation Logic ---
+        function goNext() {
+            if (state.index < state.animeList.length - 1) {
+                state.index++;
+            } else {
+                // End of list
+                showToast("End of list. Search for more!", "info");
+                renderCardStack(); // Just re-render current to reset pos
+                return;
+            }
+            renderCardStack();
+            updateActionBar();
+        }
+
+        function goPrev() {
+            if (state.index > 0) {
+                state.index--;
+                renderCardStack();
+                updateActionBar();
+            } else {
+                // Beginning of list
+                renderCardStack(); // Reset pos
+            }
+        }
+
+        function updateActionBar() {
+            if (state.animeList.length > 0) {
+                actionBar.classList.remove('hidden');
+            } else {
+                actionBar.classList.add('hidden');
+            }
+        }
+
+        document.getElementById('btnNext').addEventListener('click', () => {
+            const card = document.querySelector('.anime-card');
+            if(card) {
+                card.style.transition = 'transform 0.3s ease';
+                card.style.transform = 'translateX(100vw) rotate(10deg)';
+                card.style.opacity = '0';
+                setTimeout(goNext, 200);
+            }
+        });
+
+        document.getElementById('btnPrev').addEventListener('click', () => {
+            const card = document.querySelector('.anime-card');
+            if(card) {
+                card.style.transition = 'transform 0.3s ease';
+                card.style.transform = 'translateX(-100vw) rotate(-10deg)';
+                card.style.opacity = '0';
+                setTimeout(goPrev, 200);
+            }
+        });
+
+        document.getElementById('btnLike').addEventListener('click', () => {
+            if(state.animeList[state.index]) {
+                handleLike(state.animeList[state.index]);
+            }
+        });
+
+        // --- Modal Logic ---
+        function openModal(anime) {
+            currentModalAnime = anime;
+            modalImg.src = anime.images?.jpg?.large_image_url;
+            modalTitle.innerText = anime.title;
+            modalDesc.innerText = anime.synopsis || 'No description.';
+            
+            // Genres
+            modalGenres.innerHTML = '';
+            if(anime.genres) {
+                anime.genres.forEach(g => {
+                    const t = document.createElement('span');
+                    t.className = 'tag';
+                    t.innerText = g.name;
+                    modalGenres.appendChild(t);
+                });
+            }
+
+            // Check if already in list/liked to update button state
+            modalListBtn.innerHTML = state.watchlist.some(w => w.mal_id === anime.mal_id) 
+                ? '<span class="material-icons-round">check</span> In List' 
+                : '<span class="material-icons-round">add</span> Add to Watchlist';
+
+            modal.classList.add('open');
+        }
+
+        document.getElementById('modalClose').addEventListener('click', () => {
+            modal.classList.remove('open');
+        });
+
+        modalLikeBtn.addEventListener('click', () => {
+            if(currentModalAnime) handleLike(currentModalAnime);
+        });
+
+        modalListBtn.addEventListener('click', () => {
+            if(currentModalAnime) {
+                addToList(currentModalAnime);
+                modalListBtn.innerHTML = '<span class="material-icons-round">check</span> In List';
+            }
+        });
+
+        // --- List Logic ---
+        function addToList(anime) {
+            if (state.watchlist.some(w => w.mal_id === anime.mal_id)) {
+                showToast('Already in list', 'info');
+                return;
+            }
+            state.watchlist.unshift(anime);
+            state.saved++;
+            updateLevel();
+            unlockAchievement('collector');
+            saveData();
+            showToast('Added to list', 'check_circle');
+            renderList();
+        }
+
+        function renderList() {
+            const container = document.getElementById('watchlistContainer');
+            const filter = listFilter.value.toLowerCase();
+            
+            const filtered = state.watchlist.filter(a => 
+                a.title.toLowerCase().includes(filter) || 
+                (a.genres && a.genres.some(g => g.name.toLowerCase().includes(filter)))
+            );
+
+            container.innerHTML = '';
+            if (filtered.length === 0) {
+                container.innerHTML = '<div class="empty">List is empty</div>';
+                return;
+            }
+
+            filtered.forEach(anime => {
+                const el = document.createElement('div');
+                el.className = 'list-item';
+                el.innerHTML = `
+                    <img src="${anime.images.jpg.small_image_url}" class="list-img">
+                    <div class="list-info">
+                        <div class="list-title">${anime.title}</div>
+                        <div style="font-size:0.8rem; color:#888">${anime.year || 'N/A'} • ${anime.type}</div>
+                        <div class="list-acts">
+                            <button class="btn-round" style="width:40px;height:40px;background:transparent" onclick="viewDetailsFromList(${anime.mal_id})">
+                                <span class="material-icons-round">visibility</span>
+                            </button>
+                            <button class="btn-round" style="width:40px;height:40px;background:transparent;color:#ff5252" onclick="removeFromList(${anime.mal_id})">
+                                <span class="material-icons-round">delete</span>
+                            </button>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(el);
+            });
+        }
+
+        // Expose functions to window for inline onclicks
+        window.removeFromList = (id) => {
+            state.watchlist = state.watchlist.filter(a => a.mal_id !== id);
+            saveData();
+            renderList();
+        };
+
+        window.viewDetailsFromList = (id) => {
+            const anime = state.watchlist.find(a => a.mal_id === id);
+            if(anime) openModal(anime);
+        };
+
+        listFilter.addEventListener('input', renderList);
+
+        // --- Achievements & Score ---
+        function handleLike(anime) {
+            state.liked++;
+            updateLevel();
+            unlockAchievement('first_like');
+            saveData();
+        }
+
+        function updateLevel() {
+            const score = Math.floor((state.liked * 10) + (state.saved * 20));
+            const lvl = Math.floor(score / 100) + 1;
+            document.getElementById('levelDisplay').innerText = `Lvl ${lvl}`;
+        }
+
+        function unlockAchievement(id) {
+            const ach = state.achievements.find(a => a.id === id);
+            if(ach && !ach.unlocked) {
+                ach.unlocked = true;
+                showToast(`Unlocked: ${ach.title}`, 'emoji_events');
+                renderAchievements();
+                saveData();
+            }
+        }
+
+        function renderAchievements() {
+            const grid = document.getElementById('achGrid');
+            grid.innerHTML = '';
+            state.achievements.forEach(a => {
+                const el = document.createElement('div');
+                el.className = `ach-card ${a.unlocked ? 'unlocked' : ''}`;
+                el.innerHTML = `
+                    <div class="ach-icon material-icons-round">${a.icon}</div>
+                    <div>${a.title}</div>
+                `;
+                grid.appendChild(el);
+            });
+        }
+
+        // --- Utilities ---
+        function showToast(msg, iconName='info') {
+            const t = document.getElementById('toast');
+            t.innerText = msg;
+            t.innerHTML = `<span class="material-icons-round" style="vertical-align:middle;margin-right:5px">${iconName}</span> ${msg}`;
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 2500);
+        }
+
+        function saveData() {
+            const data = {
+                watchlist: state.watchlist,
+                liked: state.liked,
+                saved: state.saved,
+                achievements: state.achievements.map(a => ({id:a.id, unlocked:a.unlocked}))
+            };
+            localStorage.setItem('animatch_v2', JSON.stringify(data));
+        }
+
+        function loadData() {
+            const saved = localStorage.getItem('animatch_v2');
+            if(saved) {
+                const d = JSON.parse(saved);
+                state.watchlist = d.watchlist || [];
+                state.liked = d.liked || 0;
+                state.saved = d.saved || 0;
+                if(d.achievements) {
+                    d.achievements.forEach(da => {
+                        const a = state.achievements.find(x => x.id === da.id);
+                        if(a) a.unlocked = da.unlocked;
+                    });
+                }
+                updateLevel();
+                renderAchievements();
+            }
+        }
+
+        function setupNav() {
+            const items = document.querySelectorAll('.nav-item');
+            const views = document.querySelectorAll('.view');
+            
+            items.forEach(item => {
+                item.addEventListener('click', () => {
+                    items.forEach(i => i.classList.remove('active'));
+                    item.classList.add('active');
+                    
+                    const target = item.dataset.target;
+                    views.forEach(v => {
+                        v.classList.remove('active');
+                        if(v.id === target) v.classList.add('active');
+                    });
+
+                    if(target === 'view-list') renderList();
+                });
+            });
+        }
+
+        function setupInputs() {
+            // Search & Genre triggers
+            searchInput.addEventListener('input', debounceFetch);
+            genreSelect.addEventListener('change', debounceFetch);
+        }
+
+        // Start
+        init();
+
+    </script>
+</body>
+</html>
