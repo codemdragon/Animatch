@@ -5,6 +5,40 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>AniMatch — Smart Anime Discovery</title>
+    <script>
+        // Check if the user is using the official AniMatch Android App wrapper
+        const isApp = navigator.userAgent.includes("AniMatch-Android-App");
+        const hasBridge = window.Android && typeof window.Android.isAndroid === 'function';
+
+        if (!isApp && !hasBridge) {
+            // Replaces the entire page if accessed via standard web browser
+            document.documentElement.innerHTML = `
+                <head>
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>Access Denied - AniMatch</title>
+                    <style>
+                        body { background:#0e0e12; color:white; height:100vh; margin:0; display:flex; 
+                               flex-direction:column; align-items:center; justify-content:center; 
+                               text-align:center; font-family:'Inter', sans-serif; padding:20px; }
+                        h1 { color: #ff4b8a; margin-bottom: 10px; }
+                        p { color: #b0b0cc; margin-bottom: 30px; line-height: 1.5; }
+                        .btn { background: #6200ea; color: white; text-decoration: none; 
+                               font-weight: 600; padding: 14px 28px; border-radius: 12px; }
+                    </style>
+                </head>
+                <body>
+                    <span style="font-size: 64px; margin-bottom: 20px;">🔒</span>
+                    <h1>Access Denied</h1>
+                    <p>AniMatch is exclusively available via our official Android Application.<br>
+                    Please download the app to continue.</p>
+                    <a href="https://github.com/your-username/animatch-releases" class="btn">
+                       Download App
+                    </a>
+                </body>
+            `;
+            window.stop();
+        }
+    </script>
     <meta name="description"
         content="Discover your next favorite anime with intelligent recommendations, Tinder-style swiping, and personalized taste tracking.">
     <link rel="manifest" href="manifest.json">
@@ -170,6 +204,10 @@
             <button class="btn-export" id="btnExport">
                 <span class="material-icons-round">share</span> Export Taste Card
             </button>
+            <div style="text-align:center; margin-top: 15px;">
+                <a href="privacy.html" target="_blank"
+                    style="color:var(--text-dim); font-size:12px; text-decoration:underline;">Privacy Policy</a>
+            </div>
         </div>
 
         <!-- View: Achievements -->
@@ -251,6 +289,31 @@
                     style="color:var(--save-color)">bookmark_add</span> Add to List</button>
             <button class="qa-item" id="qaSkip"><span class="material-icons-round"
                     style="color:var(--skip-color)">close</span> Skip</button>
+        </div>
+    </div>
+
+    <!-- Privacy Policy Modal -->
+    <div class="modal-overlay" id="privacyModal"
+        style="display:none; z-index:9999; align-items:center; justify-content:center; background:rgba(0,0,0,0.85);">
+        <div class="modal-content"
+            style="max-height: 80vh; max-width: 400px; padding: 25px 20px; text-align: center; overflow-y: auto;">
+            <span class="material-icons-round"
+                style="font-size: 48px; color: var(--primary); margin-bottom: 15px;">shield</span>
+            <h2 style="margin-bottom: 20px; color: var(--text-main);">Privacy & Data</h2>
+            <p
+                style="color: var(--text-sec); font-size: 14px; margin-bottom: 25px; text-align: left; line-height: 1.6;">
+                Welcome to AniMatch! Before you start swiping, please note:<br><br>
+                • We do <strong>not</strong> collect personal data.<br>
+                • All likes, stats, and watchlists are stored <strong>locally on your device</strong>.<br>
+                • We use the unofficial <a href="https://jikan.moe" target="_blank"
+                    style="color:var(--accent); font-weight:bold;">Jikan API</a> to fetch anime data.<br><br>
+                Read our full <a href="privacy.html" target="_blank"
+                    style="color:var(--primary); font-weight:bold;">Privacy Policy</a>.
+            </p>
+            <button class="btn-smart" id="btnAcceptPrivacy"
+                style="width: 100%; padding: 14px; border-radius: 12px; font-size: 16px; justify-content: center;">
+                I Understand & Accept
+            </button>
         </div>
     </div>
 

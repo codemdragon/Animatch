@@ -11,6 +11,7 @@ const state = {
         genreLikes: {}, typeLikes: {}, genreSkips: {}, typeSkips: {},
         ratingsGiven: 0, discoveries: 0
     },
+    privacyAccepted: false,
     preferences: { genre: {}, type: {}, scoreBias: 7 },
     streak: { current: 0, lastDate: null, bestStreak: 0 },
     achievements: [
@@ -118,7 +119,19 @@ async function init() {
     setupQuickActions();
     renderAchievements();
     updateLevelDisplay();
-    fetchAnime();
+
+    // Privacy Check
+    if (!state.privacyAccepted) {
+        $('privacyModal').style.display = 'flex';
+        $('btnAcceptPrivacy').onclick = () => {
+            state.privacyAccepted = true;
+            saveData();
+            $('privacyModal').style.display = 'none';
+            fetchAnime();
+        };
+    } else {
+        fetchAnime();
+    }
 }
 
 // --- Streak ---
@@ -142,6 +155,26 @@ function debounceFetch() {
     if (isFetching) return;
     clearTimeout(fetchTimeout);
     fetchTimeout = setTimeout(() => { state.currentPage = 1; state.hasMorePages = true; fetchAnime(); }, 600);
+}
+
+// Fetch helper with retry for Jikan API rate limits (429)
+async function fetchWithRetry(url, retries = 2, delay = 1000) {
+    for (let i = 0; i <= retries; i++) {
+        const res = await fetch(url);
+        if (res.ok) return res.json();
+
+        if (res.status === 429) {
+            if (i < retries) {
+                showToast(`Rate limited. Retrying in ${delay / 1000}s...`, 'hourglass_empty');
+                await new Promise(r => setTimeout(r, delay));
+                delay *= 2; // Exponential backoff
+            } else {
+                throw new Error('Rate limit exceeded. Please try again later.');
+            }
+        } else {
+            throw new Error(`API Error: ${res.status}`);
+        }
+    }
 }
 
 async function fetchAnime(append = false) {
@@ -173,9 +206,7 @@ async function fetchAnime(append = false) {
     isFetching = true;
     loader.classList.add('active');
     try {
-        const res = await fetch(url);
-        if (!res.ok) throw new Error('API error');
-        const data = await res.json();
+        const data = await fetchWithRetry(url);
         let results = data.data || [];
         state.hasMorePages = data.pagination?.has_next_page || false;
 
@@ -197,7 +228,11 @@ async function fetchAnime(append = false) {
         if (query || genre) unlockManual('scout');
     } catch (err) {
         console.error(err);
-        showToast('Error loading. Please wait a moment!', 'error');
+        const msg = err.message.includes('Rate limit') ? err.message : 'Error loading. Please wait a moment!';
+        showToast(msg, 'error_outline');
+        if (!state.animeList.length) {
+            cardStack.innerHTML = `<div class="empty"><span class="material-icons-round" style="font-size:3rem;color:var(--text-sec)">error_outline</span><br>${msg}</div>`;
+        }
     } finally {
         isFetching = false;
         loader.classList.remove('active');
@@ -212,17 +247,16 @@ async function fetchSurpriseAnime() {
     $('btnSmartMatch').classList.remove('active-mode');
     try {
         const page = Math.floor(Math.random() * 10) + 1;
-        const res = await fetch(`https://api.jikan.moe/v4/top/anime?page=${page}&limit=20&sfw=true`);
-        if (!res.ok) throw new Error('API error');
-        const data = await res.json();
+        const data = await fetchWithRetry(`https://api.jikan.moe/v4/top/anime?page=${page}&limit=20&sfw=true`);
         state.animeList = (data.data || []).sort(() => Math.random() - 0.5);
         state.index = 0;
         renderCardStack();
         updateActionBar();
         showToast('🎲 Random picks loaded!', 'casino');
         switchToView('view-discover');
-    } catch (e) {
-        showToast('Error loading random anime', 'error');
+    } catch (err) {
+        const msg = err.message.includes('Rate limit') ? err.message : 'Error loading random anime';
+        showToast(msg, 'error_outline');
     } finally {
         isFetching = false;
         loader.classList.remove('active');
@@ -1110,7 +1144,8 @@ function saveData() {
         preferences: state.preferences,
         streak: state.streak,
         achievements: state.achievements.map(a => ({ id: a.id, unlocked: a.unlocked })),
-        theme: state.theme
+        theme: state.theme,
+        privacyAccepted: state.privacyAccepted
     };
     localStorage.setItem('animatch_v3', JSON.stringify(data));
 }
@@ -1139,6 +1174,7 @@ function loadData() {
         state.preferences = { ...state.preferences, ...d.preferences };
         state.streak = { ...state.streak, ...d.streak };
         state.theme = d.theme || 'dark';
+        state.privacyAccepted = d.privacyAccepted || false;
         if (d.achievements) {
             d.achievements.forEach(da => {
                 const a = state.achievements.find(x => x.id === da.id);
