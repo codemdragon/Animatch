@@ -122,15 +122,25 @@ async function init() {
 
     // Privacy Check
     if (!state.privacyAccepted) {
-        $('privacyModal').style.display = 'flex';
-        $('privacyModal').style.opacity = '1';
-        $('privacyModal').style.pointerEvents = 'all';
+        const pm = $('privacyModal');
+        pm.style.display = 'flex';
+        pm.style.opacity = '0';
+        pm.style.pointerEvents = 'none';
+        // Use rAF so display:flex is painted before the opacity transition starts.
+        // Without this, Android WebView composites both changes in the same frame
+        // and the transition never fires — making the modal invisible.
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                pm.style.opacity = '1';
+                pm.style.pointerEvents = 'all';
+            });
+        });
         $('btnAcceptPrivacy').onclick = () => {
             state.privacyAccepted = true;
             saveData();
-            $('privacyModal').style.opacity = '0';
-            $('privacyModal').style.pointerEvents = 'none';
-            setTimeout(() => $('privacyModal').style.display = 'none', 300);
+            pm.style.opacity = '0';
+            pm.style.pointerEvents = 'none';
+            setTimeout(() => pm.style.display = 'none', 300);
         };
     }
 
