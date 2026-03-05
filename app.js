@@ -122,15 +122,21 @@ async function init() {
 
     // Privacy Check
     if (!state.privacyAccepted) {
-        $('privacyModal').style.display = 'flex';
-        $('privacyModal').style.opacity = '1';
-        $('privacyModal').style.pointerEvents = 'all';
+        const pm = $('privacyModal');
+        // Double rAF: element is already display:flex in HTML (opacity:0).
+        // We just need to let the browser register the initial paint before
+        // transitioning opacity, otherwise Android WebView skips the transition.
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                pm.style.opacity = '1';
+                pm.style.pointerEvents = 'all';
+            });
+        });
         $('btnAcceptPrivacy').onclick = () => {
             state.privacyAccepted = true;
             saveData();
-            $('privacyModal').style.opacity = '0';
-            $('privacyModal').style.pointerEvents = 'none';
-            setTimeout(() => $('privacyModal').style.display = 'none', 300);
+            pm.style.opacity = '0';
+            pm.style.pointerEvents = 'none';
         };
     }
 

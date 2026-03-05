@@ -300,9 +300,9 @@
 
     <!-- Privacy Policy Modal -->
     <div class="modal-overlay" id="privacyModal"
-        style="display:none; z-index:9999; align-items:center; justify-content:center; background:rgba(0,0,0,0.85);">
+        style="display:flex; opacity:0; pointer-events:none; transition:opacity 0.3s; z-index:9999; align-items:center; justify-content:center; background:rgba(0,0,0,0.85);">
         <div class="modal-content"
-            style="max-height: 80vh; max-width: 400px; padding: 25px 20px; text-align: center; overflow-y: auto;">
+            style="max-height:80vh; max-width:400px; padding:25px 20px; padding-bottom:max(20px, env(safe-area-inset-bottom, 20px)); text-align:center; overflow-y:auto; transform:none; height:auto; border-radius:18px;">
             <span class="material-icons-round"
                 style="font-size: 48px; color: var(--primary); margin-bottom: 15px;">shield</span>
             <h2 style="margin-bottom: 20px; color: var(--text-main);">Privacy & Data</h2>
