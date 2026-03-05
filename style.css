@@ -164,7 +164,9 @@ body {
     height: 100dvh;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    /* NOTE: overflow:hidden clips position:fixed children in Android WebView.
+       Overflow is now controlled per-child (main, header) instead. */
+    overflow: visible;
     transition: background-color 0.4s, color 0.4s;
 }
 
@@ -372,7 +374,7 @@ header {
 main {
     flex: 1;
     position: relative;
-    overflow: hidden;
+    overflow: clip; /* clips children without creating a new fixed-positioning context */
     width: 100%;
     max-width: 900px;
     margin: 0 auto;
