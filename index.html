@@ -6,38 +6,42 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>AniMatch — Smart Anime Discovery</title>
     <script>
-        // Check if the user is using the official AniMatch Android App wrapper
-        const isApp = navigator.userAgent.includes("AniMatch-Android-App");
-        const hasBridge = window.Android && typeof window.Android.isAndroid === 'function';
+        // Deferred security check — waits for the Android WebView bridge to inject
+        window.addEventListener('DOMContentLoaded', () => {
+            setTimeout(() => {
+                const isApp = navigator.userAgent.includes("AniMatch-Android-App");
+                const hasBridge = window.Android && typeof window.Android.isAndroid === 'function';
 
-        if (!isApp && !hasBridge) {
-            // Replaces the entire page if accessed via standard web browser
-            document.documentElement.innerHTML = `
-                <head>
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <title>Access Denied - AniMatch</title>
-                    <style>
-                        body { background:#0e0e12; color:white; height:100vh; margin:0; display:flex; 
-                               flex-direction:column; align-items:center; justify-content:center; 
-                               text-align:center; font-family:'Inter', sans-serif; padding:20px; }
-                        h1 { color: #ff4b8a; margin-bottom: 10px; }
-                        p { color: #b0b0cc; margin-bottom: 30px; line-height: 1.5; }
-                        .btn { background: #6200ea; color: white; text-decoration: none; 
-                               font-weight: 600; padding: 14px 28px; border-radius: 12px; }
-                    </style>
-                </head>
-                <body>
-                    <span style="font-size: 64px; margin-bottom: 20px;">🔒</span>
-                    <h1>Access Denied</h1>
-                    <p>AniMatch is exclusively available via our official Android Application.<br>
-                    Please download the app to continue.</p>
-                    <a href="https://github.com/your-username/animatch-releases" class="btn">
-                       Download App
-                    </a>
-                </body>
-            `;
-            window.stop();
-        }
+                if (!isApp && !hasBridge) {
+                    // Replaces the entire page if accessed via standard web browser
+                    document.documentElement.innerHTML = `
+                        <head>
+                            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                            <title>Access Denied - AniMatch</title>
+                            <style>
+                                body { background:#0e0e12; color:white; height:100vh; margin:0; display:flex; 
+                                       flex-direction:column; align-items:center; justify-content:center; 
+                                       text-align:center; font-family:'Inter', sans-serif; padding:20px; }
+                                h1 { color: #ff4b8a; margin-bottom: 10px; }
+                                p { color: #b0b0cc; margin-bottom: 30px; line-height: 1.5; }
+                                .btn { background: #6200ea; color: white; text-decoration: none; 
+                                       font-weight: 600; padding: 14px 28px; border-radius: 12px; }
+                            </style>
+                        </head>
+                        <body>
+                            <span style="font-size: 64px; margin-bottom: 20px;">🔒</span>
+                            <h1>Access Denied</h1>
+                            <p>AniMatch is exclusively available via our official Android Application.<br>
+                            Please download the app to continue.</p>
+                            <a href="https://github.com/your-username/animatch-releases" class="btn">
+                               Download App
+                            </a>
+                        </body>
+                    `;
+                    window.stop();
+                }
+            }, 300);
+        });
     </script>
     <meta name="description"
         content="Discover your next favorite anime with intelligent recommendations, Tinder-style swiping, and personalized taste tracking.">
@@ -220,18 +224,18 @@
     <!-- Navigation -->
     <nav>
         <div class="nav-inner">
-        <div class="nav-item active" data-target="view-discover">
-            <span class="material-icons-round">explore</span> Discover
-        </div>
-        <div class="nav-item" data-target="view-list">
-            <span class="material-icons-round">bookmarks</span> List
-        </div>
-        <div class="nav-item" data-target="view-profile">
-            <span class="material-icons-round">person</span> Profile
-        </div>
-        <div class="nav-item" data-target="view-achievements">
-            <span class="material-icons-round">emoji_events</span> Awards
-        </div>
+            <div class="nav-item active" data-target="view-discover">
+                <span class="material-icons-round">explore</span> Discover
+            </div>
+            <div class="nav-item" data-target="view-list">
+                <span class="material-icons-round">bookmarks</span> List
+            </div>
+            <div class="nav-item" data-target="view-profile">
+                <span class="material-icons-round">person</span> Profile
+            </div>
+            <div class="nav-item" data-target="view-achievements">
+                <span class="material-icons-round">emoji_events</span> Awards
+            </div>
         </div>
     </nav>
 
