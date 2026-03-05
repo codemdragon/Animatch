@@ -123,9 +123,6 @@ async function init() {
     // Privacy Check
     if (!state.privacyAccepted) {
         const pm = $('privacyModal');
-        // Double rAF: element is already display:flex in HTML (opacity:0).
-        // We just need to let the browser register the initial paint before
-        // transitioning opacity, otherwise Android WebView skips the transition.
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
                 pm.style.opacity = '1';
@@ -137,11 +134,14 @@ async function init() {
             saveData();
             pm.style.opacity = '0';
             pm.style.pointerEvents = 'none';
+            // Only start fetching AFTER the user accepts — avoids
+            // wasting the rate limit budget before they even see the app
+            fetchAnime();
         };
+    } else {
+        // Returning user — fetch immediately as normal
+        fetchAnime();
     }
-
-    // Always pre-load the first stack of anime
-    fetchAnime();
 }
 
 // --- Streak ---
